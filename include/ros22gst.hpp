@@ -34,6 +34,7 @@ private:
     void run_pushRtsp();
     void configure();
     void push_udpstream();
+    GMainLoop      *loop;
     std::string    gsconfig_;
     std::string    encoding;
     std::string    fps;

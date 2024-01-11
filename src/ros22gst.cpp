@@ -73,7 +73,6 @@ void Ros22gst::run_pushRtsp()
 {
     RCLCPP_INFO(get_logger(),"start run_pushRtsp..");
     gchar * str;
-    GMainLoop *loop;
     GstRTSPServer *server;
     GstRTSPMountPoints *mounts;
     GstRTSPMediaFactory *factory;
@@ -127,7 +126,7 @@ void Ros22gst::run_pushRtsp()
 
 
     // Add a timeout for the session cleanup.
-    g_timeout_add_seconds (5, (GSourceFunc)timeout, server);
+    //g_timeout_add_seconds (5, (GSourceFunc)timeout, server);
 
     // Attach the RTSP mServer to the main context.
     if (0 == gst_rtsp_server_attach (server, NULL))
@@ -151,7 +150,7 @@ void Ros22gst::push_udpstream()
 {
     RCLCPP_INFO(get_logger(), "start Ros22gst push_udpstream... ");
     GError * error = 0;
-    RCLCPP_INFO(get_logger(), "gsconfig_: %s.", gsconfig_.c_str());
+
     pipeline_ = gst_parse_launch(gsconfig_.c_str(), &error);
     if (pipeline_ == NULL) {
     	RCLCPP_FATAL_STREAM(get_logger(), error->message);
@@ -219,7 +218,7 @@ void Ros22gst::callback1(const sensor_msgs::msg::Image::ConstSharedPtr & image_m
   guint size;
   GstFlowReturn ret;
 
-  size = 640 * 480 * 3;
+  size = 640 * 480 * 3;  //RGB8 size 
 
   buffer = gst_buffer_new_allocate (NULL, size, NULL);
 
@@ -243,14 +242,16 @@ void Ros22gst::callback1(const sensor_msgs::msg::Image::ConstSharedPtr & image_m
 
 Ros22gst::~Ros22gst()
 {
-    gst_deinit();
+    g_main_loop_quit(loop);
+    RCLCPP_INFO(get_logger(), "Stopping node...");
     pipeline_thread_.join();
+
     if (pipeline_)
     {
         if (gst_app_src_end_of_stream(GST_APP_SRC(source_)) != GST_FLOW_OK)
         {
             RCLCPP_ERROR(get_logger(),"Cannot send EOS to GStreamer pipeline\n");
-            return;
+            //return;
         }
         
         RCLCPP_INFO(get_logger(), "Stopping gstreamer pipeline...");
@@ -259,5 +260,7 @@ Ros22gst::~Ros22gst()
         pipeline_ = NULL;
 
     }
+    
+    gst_deinit();
 }
 
