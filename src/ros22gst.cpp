@@ -89,7 +89,7 @@ void Ros22gst::callback(const sensor_msgs::msg::Image::ConstSharedPtr & image_ms
     memcpy(info.data, image.data, size);
     gst_buffer_unmap(buffer_, &info);
 
-    RCLCPP_INFO(this->get_logger(), "push buffer size %ld, image code %s....", size, image_msg->encoding.c_str());
+    //RCLCPP_INFO(this->get_logger(), "push buffer size %ld, image code %s....", size, image_msg->encoding.c_str());
     if (gst_app_src_push_buffer(GST_APP_SRC(source_), buffer_) != GST_FLOW_OK) {
         RCLCPP_ERROR(get_logger(), "gst_app_src_push_buffer(): Error pushing buffer to GStreamer pipeline");
         return;
