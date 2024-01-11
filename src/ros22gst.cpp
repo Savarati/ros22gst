@@ -153,7 +153,6 @@ void Ros22gst::push_udpstream()
     GError * error = 0;
     RCLCPP_INFO(get_logger(), "gsconfig_: %s.", gsconfig_.c_str());
     pipeline_ = gst_parse_launch(gsconfig_.c_str(), &error);
-    //pipeline_ = gst_parse_launch("appsrc name=appsrc0 caps=video/x-raw,framerate=30/1,width=640,height=480,format=RGB ! queue ! videoconvert ! nvh264enc ! h264parse config-interval=1 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 port=8555 sync=false async=false", &error);
     if (pipeline_ == NULL) {
     	RCLCPP_FATAL_STREAM(get_logger(), error->message);
     	return;

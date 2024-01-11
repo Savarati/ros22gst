@@ -1,10 +1,14 @@
 # ros22gst
 ros2 sensor_msgs::msg::Image topic to gstreamer pipeline example
 
-ros2 image 主题消息到 gstreamer 例子
+Data flow :
 
-configure optional in xml file, 
-the topics,width,height,fps options must be the same as publish topic.(appsrc pulgin requirements)
+ros2 image topic --> gstreamer udpstream --> gstramer rtspstream --> QGC
+
+configure optional in xml file,
+the topics, width, height, fps, options must be the same as publish topic.(appsrc pulgin requirements)
+
+encoding : there are two options. rgb8: colour picture   mono8: black/white picture
 
 build: 
 
