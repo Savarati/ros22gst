@@ -3,7 +3,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <iostream>
-#include <string>
+#include <sstream>
 #include "ros22gst.hpp"
 
 using namespace ros22gst;
@@ -12,34 +12,148 @@ Ros22gst::Ros22gst(const rclcpp::NodeOptions & options)
 : rclcpp::Node("Ros22gst", options)
 {
     RCLCPP_INFO(get_logger(), "start Ros22gst node... ");
-    std::stringstream ss;
-    std::string gsconfig_;
-    GError * error = 0;
+
     gst_init (NULL, NULL);
 
+    this->configure();
+    
+    this->push_udpstream();
+    
+    pipeline_thread_ = std::thread(
+    [this]()
+    {
+      run_pushRtsp();
+    });
+}
+
+ void Ros22gst::configure()
+ {
+    RCLCPP_INFO(get_logger(), "start Ros22gst configure... ");
+    std::stringstream ss;
+    
+    rtspRecord = false;
     encoding = declare_parameter("encoding", "rgb8");
     
-    const auto fps = declare_parameter("fps", "30/1");
-    const auto width = declare_parameter("width", 640);
-    const auto height = declare_parameter("height", 480);
+    fps = declare_parameter("fps", "30/1");
+    width = declare_parameter("width", 640);
+    height = declare_parameter("height", 480);
+    topiccfg = declare_parameter("topic", "");
+    rtspport = declare_parameter("rtspport", 8554);
+    rtspmount = declare_parameter("rtspmount", "/live0");
+    udpport = declare_parameter("udpport", 8555);
     
-    const auto topiccfg = declare_parameter("topic", "");
     const auto gsconfig_rosparam = declare_parameter("gscam_config", "");
-    
     if(!gsconfig_rosparam.empty()) {
     	if(encoding == "rgb8")
             ss << "appsrc name=appsrc0 caps=video/x-raw," << "framerate=" << fps << ",width=" << width << ",height=" << height << ",format="
-            << "RGB" << " ! " << gsconfig_rosparam;
+            << "RGB" << " ! " << gsconfig_rosparam << " port=" << udpport;
         else
             ss << "appsrc name=appsrc0 caps=video/x-raw," << "framerate=" << fps << ",width=" << width << ",height=" << height << ",format="
-            << "GRAY8" << " ! " << gsconfig_rosparam;
+            << "GRAY8" << " ! " << gsconfig_rosparam << " port=" << udpport;
     	gsconfig_ = ss.str();
     } else {
         gsconfig_ = "appsrc name=appsrc0 caps=video/x-raw,framerate=30/1,width=640,height=480,format=RGB ! queue ! videoconvert ! autovideosink";
     }
     RCLCPP_INFO(get_logger(), "gsconfig_: %s.", gsconfig_.c_str());
+ }
+ 
+static gboolean timeout(GstRTSPServer *server)
+{
+    GstRTSPSessionPool *pool;
+
+    pool = gst_rtsp_server_get_session_pool(server);
+    gst_rtsp_session_pool_cleanup(pool);
+    g_object_unref(pool);
+
+    return TRUE;
+}
+
+ 
+void Ros22gst::run_pushRtsp()
+{
+    RCLCPP_INFO(get_logger(),"start run_pushRtsp..");
+    gchar * str;
+    GMainLoop *loop;
+    GstRTSPServer *server;
+    GstRTSPMountPoints *mounts;
+    GstRTSPMediaFactory *factory;
+    GOptionContext *optctx;
+    GError *error = NULL;
+
+    loop = g_main_loop_new(NULL, FALSE);
     
+    // Initialize RTSP server.
+    server = gst_rtsp_server_new();
+    if(server == NULL)
+    {
+        RCLCPP_INFO(get_logger(),"CamRtspStream: server get fail\n");
+        return;
+    }
+
+    // Set the mServer IP address.
+    //gst_rtsp_server_set_address (Server, rtspHost.c_str());
+
+    // Set the mServer port.
+    gst_rtsp_server_set_service (server, std::to_string(rtspport).c_str());
+
+    // Get the mount points for this server.
+    mounts = gst_rtsp_server_get_mount_points(server);
+    if(mounts == NULL)
+    {
+        RCLCPP_INFO(get_logger(),"CamRtspStream: mounts get fail\n");
+        return;
+    }
+    
+    str = g_strdup_printf ("( udpsrc name=pay0 port=%d caps=\"" CAPS "\" )",udpport);
+    RCLCPP_INFO(get_logger(),"RTSP pipeline at %s", str);
+
+    // Create a media factory.
+    factory = gst_rtsp_media_factory_new ();
+    if(factory == NULL)
+    {
+        RCLCPP_INFO(get_logger(),"CamRtspStream: mfactory get fail\n");
+        return;
+    }
+
+    gst_rtsp_media_factory_set_shared (factory, TRUE);
+
+    // Add the factory with given path to the mount points.
+    gst_rtsp_mount_points_add_factory (mounts, rtspmount.c_str(), factory);
+
+    gst_rtsp_media_factory_set_transport_mode (factory,
+      rtspRecord ? GST_RTSP_TRANSPORT_MODE_RECORD : GST_RTSP_TRANSPORT_MODE_PLAY);
+    
+    gst_rtsp_media_factory_set_launch (factory, str);
+
+
+    // Add a timeout for the session cleanup.
+    g_timeout_add_seconds (5, (GSourceFunc)timeout, server);
+
+    // Attach the RTSP mServer to the main context.
+    if (0 == gst_rtsp_server_attach (server, NULL))
+        RCLCPP_INFO(get_logger(),"Failed to attach RTSP server to main loop context!\n");
+
+    // No need to keep reference for below objects.
+    g_object_unref (mounts);
+
+    RCLCPP_INFO(get_logger(),"Stream ready at rtsp://127.0.0.1:%d%s...", rtspport, rtspmount.c_str());
+    
+    g_main_loop_run(loop);
+  
+    g_object_unref(server);
+    g_object_unref (factory);
+    server = nullptr;
+    factory = nullptr;
+    g_main_loop_unref (loop);
+}
+ 
+void Ros22gst::push_udpstream()
+{
+    RCLCPP_INFO(get_logger(), "start Ros22gst push_udpstream... ");
+    GError * error = 0;
+    RCLCPP_INFO(get_logger(), "gsconfig_: %s.", gsconfig_.c_str());
     pipeline_ = gst_parse_launch(gsconfig_.c_str(), &error);
+    //pipeline_ = gst_parse_launch("appsrc name=appsrc0 caps=video/x-raw,framerate=30/1,width=640,height=480,format=RGB ! queue ! videoconvert ! nvh264enc ! h264parse config-interval=1 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 port=8555 sync=false async=false", &error);
     if (pipeline_ == NULL) {
     	RCLCPP_FATAL_STREAM(get_logger(), error->message);
     	return;
@@ -65,6 +179,7 @@ Ros22gst::Ros22gst(const rclcpp::NodeOptions & options)
     this, topic, std::bind(&Ros22gst::callback, this, std::placeholders::_1), "raw");
 
     RCLCPP_INFO(this->get_logger(), "Waiting for topic %s...", topic.c_str());
+
 }
 
 void Ros22gst::callback(const sensor_msgs::msg::Image::ConstSharedPtr & image_msg)
@@ -129,6 +244,8 @@ void Ros22gst::callback1(const sensor_msgs::msg::Image::ConstSharedPtr & image_m
 
 Ros22gst::~Ros22gst()
 {
+    gst_deinit();
+    pipeline_thread_.join();
     if (pipeline_)
     {
         if (gst_app_src_end_of_stream(GST_APP_SRC(source_)) != GST_FLOW_OK)
@@ -141,11 +258,7 @@ Ros22gst::~Ros22gst()
         gst_element_set_state(pipeline_, GST_STATE_NULL);
         gst_object_unref(pipeline_);
         pipeline_ = NULL;
-        
-        gst_deinit();
 
     }
-
-       
 }
 

@@ -7,11 +7,14 @@
     <param name="topic" value="/mavgscam/camera/image_raw"/>
     <!--param name="gscam_config" value=" queue ! videoconvert ! autovideosink"/-->
     <!--param name="gscam_config" value=" queue ! videoconvert ! x264enc ! rtph264pay ! udpsink host=127.0.0.1 port=8554 sync=false async=false"/-->
-    <param name="gscam_config" value=" queue ! videoconvert ! nvh264enc ! rtph264pay ! udpsink host=127.0.0.1 port=8554 sync=false async=false"/>
+    <param name="gscam_config" value=" queue ! videoconvert ! nvh264enc ! h264parse config-interval=1 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 sync=false async=false"/>
     <param name="fps" value="30/1"/>
     <param name="width" value="640"/>
     <param name="height" value="480"/>
     <param name="encoding" value="rgb8"/>
+    <param name="rtspport" value="8554"/>
+    <param name="rtspmount" value="/live0"/>
+    <param name="udpport" value="8555"/>
  
   <!-- mavros server parameter -->
   
