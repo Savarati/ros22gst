@@ -18,6 +18,9 @@ int main(int argc, char *argv[])
     RCLCPP_INFO(node->get_logger(), "start ros2 to gst");
     
     rclcpp::spin(node);
+
+    RCLCPP_INFO(node->get_logger(), "shutdown ros2 to gst");
     rclcpp::shutdown();
     return 0;
 }
+

@@ -24,35 +24,39 @@ public:
     ~Ros22gst();
     GstElement *pipeline_;
     GstElement *source_;
+    //GstAppSrc *appsrc;
     image_transport::Subscriber sub_image;
     GstBuffer* buffer_;
     
 private:
     void callback(const sensor_msgs::msg::Image::ConstSharedPtr & image_msg);
     void callback1(const sensor_msgs::msg::Image::ConstSharedPtr & image_msg);
+    void appsrc_set_caps(const sensor_msgs::msg::Image::ConstSharedPtr & msg);
+    //void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, gpointer user_data);
     std::thread pipeline_thread_;
-    GstRTSPServer *server;
-    GstRTSPMediaFactory *factory;
-    void run_pushRtsp();
+    void push_rtspstream();
     void configure();
-    void push_udpstream();
     GMainLoop      *loop;
     std::string    gsconfig_;
     std::string    encoding;
+
+    bool           rtspReady;
+    bool           isFristCall;
+
     int32_t        fps;
     int32_t        width;
     int32_t        height;
     std::string    topiccfg;
     
-    int32_t        rtspport;
-    std::string    rtspmount;
-    int32_t        udpport;
+    std::string    rtspHost;
+    std::string    rtspMount;
+    int32_t        rtspPort;
     bool           rtspRecord;
-
-    guint          gst_server_id;
     
 };
 
 }
 
+static gboolean timeout(GstRTSPServer *server);
+static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, GstElement **pipeline);
 #endif // PIPELINE_H

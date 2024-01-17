@@ -19,10 +19,12 @@ Ros22gst::Ros22gst(const rclcpp::NodeOptions & options)
     
     this->push_udpstream();
     
+    this->run_pushRtsp();
     pipeline_thread_ = std::thread(
     [this]()
     {
-      run_pushRtsp();
+       g_main_loop_run(loop);
+       RCLCPP_INFO(get_logger(),"thread exit...");
     });
 }
 
@@ -34,7 +36,7 @@ Ros22gst::Ros22gst(const rclcpp::NodeOptions & options)
     rtspRecord = false;
     encoding = declare_parameter("encoding", "rgb8");
     
-    fps = declare_parameter("fps", "30/1");
+    fps = declare_parameter("fps", 30);
     width = declare_parameter("width", 640);
     height = declare_parameter("height", 480);
     topiccfg = declare_parameter("topic", "");
@@ -45,10 +47,10 @@ Ros22gst::Ros22gst(const rclcpp::NodeOptions & options)
     const auto gsconfig_rosparam = declare_parameter("gscam_config", "");
     if(!gsconfig_rosparam.empty()) {
     	if(encoding == "rgb8")
-            ss << "appsrc name=appsrc0 caps=video/x-raw," << "framerate=" << fps << ",width=" << width << ",height=" << height << ",format="
+            ss << "appsrc name=appsrc0 caps=video/x-raw," << "framerate=" << fps << "/1,width=" << width << ",height=" << height << ",format="
             << "RGB" << " ! " << gsconfig_rosparam << " port=" << udpport;
         else
-            ss << "appsrc name=appsrc0 caps=video/x-raw," << "framerate=" << fps << ",width=" << width << ",height=" << height << ",format="
+            ss << "appsrc name=appsrc0 caps=video/x-raw," << "framerate=" << fps << "/1,width=" << width << ",height=" << height << ",format="
             << "GRAY8" << " ! " << gsconfig_rosparam << " port=" << udpport;
     	gsconfig_ = ss.str();
     } else {
@@ -73,9 +75,9 @@ void Ros22gst::run_pushRtsp()
 {
     RCLCPP_INFO(get_logger(),"start run_pushRtsp..");
     gchar * str;
-    GstRTSPServer *server;
+    //GstRTSPServer *server;
     GstRTSPMountPoints *mounts;
-    GstRTSPMediaFactory *factory;
+    //GstRTSPMediaFactory *factory;
     GOptionContext *optctx;
     GError *error = NULL;
 
@@ -121,29 +123,36 @@ void Ros22gst::run_pushRtsp()
 
     gst_rtsp_media_factory_set_transport_mode (factory,
       rtspRecord ? GST_RTSP_TRANSPORT_MODE_RECORD : GST_RTSP_TRANSPORT_MODE_PLAY);
+
+    //gst_rtsp_media_factory_set_eos_shutdown(factory, true);
     
     gst_rtsp_media_factory_set_launch (factory, str);
 
 
     // Add a timeout for the session cleanup.
-    //g_timeout_add_seconds (5, (GSourceFunc)timeout, server);
+    g_timeout_add_seconds (5, (GSourceFunc)timeout, server);
 
     // Attach the RTSP mServer to the main context.
-    if (0 == gst_rtsp_server_attach (server, NULL))
-        RCLCPP_INFO(get_logger(),"Failed to attach RTSP server to main loop context!\n");
+    gst_server_id = gst_rtsp_server_attach (server, NULL);
+    if (!gst_server_id) {
+        RCLCPP_ERROR(get_logger(),"Failed to attach RTSP server to main loop context!\n");
+        return;
+    }
 
     // No need to keep reference for below objects.
     g_object_unref (mounts);
 
     RCLCPP_INFO(get_logger(),"Stream ready at rtsp://127.0.0.1:%d%s...", rtspport, rtspmount.c_str());
     
-    g_main_loop_run(loop);
-  
+    //g_main_loop_run(loop);
+    //RCLCPP_INFO(get_logger(),"thread exit...");
+
+    /*g_source_remove (gst_server_id);
     g_object_unref(server);
     g_object_unref (factory);
     server = nullptr;
-    factory = nullptr;
-    g_main_loop_unref (loop);
+    factory = nullptr;*/
+    return;
 }
  
 void Ros22gst::push_udpstream()
@@ -240,12 +249,26 @@ void Ros22gst::callback1(const sensor_msgs::msg::Image::ConstSharedPtr & image_m
 
 }
 
+static GstRTSPFilterResult clientFilter(GstRTSPServer* server, GstRTSPClient* client, gpointer user)
+{
+return GST_RTSP_FILTER_REMOVE;
+}
+
 Ros22gst::~Ros22gst()
 {
-    g_main_loop_quit(loop);
-    RCLCPP_INFO(get_logger(), "Stopping node...");
-    pipeline_thread_.join();
+    RCLCPP_INFO(get_logger(), "Stopping rtsp pipeline_thread_...");
+    
+    gst_rtsp_server_client_filter(server, clientFilter, nullptr);
 
+    g_main_loop_quit(loop);
+    g_main_loop_unref(loop);
+    g_source_remove (gst_server_id);
+    g_object_unref(server);
+    //g_object_unref (factory);
+    server = nullptr;
+    factory = nullptr;
+    pipeline_thread_.join();
+    
     if (pipeline_)
     {
         if (gst_app_src_end_of_stream(GST_APP_SRC(source_)) != GST_FLOW_OK)
@@ -263,4 +286,11 @@ Ros22gst::~Ros22gst()
     
     gst_deinit();
 }
+
+
+//这样写 ros2节点rclcpp::spin可以收到ctrl+c信号退出，需要使用使用g_main_loop_quit退出线程循环，
+//gst-launch appsrc udp线程置为GST_STATE_NULL。
+
+
+
 
