@@ -6,8 +6,8 @@
     <param name="topic" value="/mavgscam0/camera/image_raw"/>
     <!--param name="gscam_config" value=" queue ! videoconvert ! autovideosink"/-->
     <!--param name="gscam_config" value=" queue ! videoconvert ! x264enc ! rtph264pay ! udpsink host=127.0.0.1 port=8554 sync=false async=false"/-->
-    <!--param name="gscam_config" value=" queue ! videoconvert ! nvh264enc ! h264parse config-interval=1 ! rtph264pay pt=96 name=pay0"/-->
-    <param name="gscam_config" value=" queue ! videoconvert ! nvh264enc ! h264parse config-interval=1 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 sync=false async=false"/>
+    <param name="gscam_config" value=" queue ! videoconvert ! nvh264enc ! h264parse config-interval=1 ! rtph264pay pt=96 name=pay0"/>
+    <!--param name="gscam_config" value=" queue ! videoconvert ! nvh264enc ! h264parse config-interval=1 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 sync=false async=false"/-->
     <param name="fps" value="30"/>
     <param name="width" value="640"/>
     <param name="height" value="480"/>

@@ -29,7 +29,7 @@ include_directories(
 
 ## Declare a C++ library
 add_library(ros22gst SHARED
-    src/ros22gst.cpp
+    src/ros2gst.cpp
 )
 
 ament_target_dependencies(ros22gst
